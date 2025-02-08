@@ -18,6 +18,7 @@
 
 module Data.Morpheus.App.Internal.Resolving.Resolver
   ( Resolver,
+    hoistResolver,
     LiftOperation,
     ResponseEvent (..),
     ResponseStream,
@@ -47,6 +48,7 @@ import Data.Morpheus.App.Internal.Resolving.ResolverState
     runResolverStateT,
     runResolverStateValueM,
     toResolverStateT,
+    hoistResolverStateT,
   )
 import Data.Morpheus.Internal.Ext
   ( GQLResult,
@@ -121,6 +123,14 @@ instance Show (Resolver o e m value) where
   show ResolverS {} = "Resolver SUBSCRIPTION e m a"
 
 deriving instance (Functor m) => Functor (Resolver o e m)
+
+hoistResolver :: (Functor m) => (forall a. m a -> n a) -> Resolver o event m value -> Resolver o event n value
+hoistResolver morphism ResolverQ{runResolverQ} = ResolverQ{runResolverQ = hoistResolverStateT morphism runResolverQ}
+hoistResolver morphism ResolverM{runResolverM} = ResolverM{runResolverM = hoistResolverStateT morphism runResolverM}
+hoistResolver morphism ResolverS{runResolverS} = ResolverS{runResolverS = hoistResolverStateT morphism (hoistSubEventRes morphism <$> runResolverS)}
+
+hoistSubEventRes :: (forall a. m a -> n a) -> SubEventRes event m value -> SubEventRes event n value
+hoistSubEventRes morphism s = ReaderT $ hoistResolverStateT morphism . runReaderT s
 
 -- Applicative
 instance (LiftOperation o, Monad m) => Applicative (Resolver o e m) where

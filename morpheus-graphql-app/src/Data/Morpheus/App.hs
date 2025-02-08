@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
@@ -17,6 +18,7 @@ module Data.Morpheus.App
     withDebugger,
     disableIntrospection,
     mkApp,
+    hoistApp,
     runAppStream,
     MapAPI (..),
     eitherSchema,
@@ -35,6 +37,7 @@ import Data.Morpheus.App.Internal.Resolving
     RootResolverValue,
     resultOr,
     runRootResolverValue,
+    hoistRootResolverValue,
   )
 import Data.Morpheus.App.Internal.Stitching (Stitching (..))
 import Data.Morpheus.App.MapAPI (MapAPI (..))
@@ -81,6 +84,19 @@ mkApp appSchema appResolvers =
     FailApp
     (App . AppData defaultConfig [] appResolvers)
     (validateSchema True defaultConfig appSchema)
+
+hoistAppData :: (Functor m) => (forall a. m a -> n a) -> AppData e m s -> AppData e n s
+hoistAppData morphism (AppData {appConfig, appSchema, appResolvers, constraints}) =
+  AppData
+    { appConfig
+    , appSchema
+    , appResolvers = hoistRootResolverValue morphism appResolvers
+    , constraints
+    }
+
+hoistApp :: (Functor m) => (forall a. m a -> n a) -> App e m -> App e n
+hoistApp _ (FailApp a) = FailApp a
+hoistApp morphism (App {app}) = App {app = hoistAppData morphism app}
 
 data App event (m :: Type -> Type)
   = App {app :: AppData event m VALID}

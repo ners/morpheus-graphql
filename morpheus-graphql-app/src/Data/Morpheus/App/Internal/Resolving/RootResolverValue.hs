@@ -10,6 +10,7 @@
 
 module Data.Morpheus.App.Internal.Resolving.RootResolverValue
   ( runRootResolverValue,
+    hoistRootResolverValue,
     RootResolverValue (..),
   )
 where
@@ -25,6 +26,7 @@ import Data.Morpheus.App.Internal.Resolving.ResolveValue
 import Data.Morpheus.App.Internal.Resolving.Resolver
   ( Resolver,
     ResponseStream,
+    hoistResolver,
   )
 import Data.Morpheus.App.Internal.Resolving.ResolverState
   ( ResolverState,
@@ -123,3 +125,16 @@ withIntroFields :: Config -> (MonadResolver m, MonadOperation m ~ QUERY) => Obje
 withIntroFields config (ObjectTypeResolver fields)
   | introspection config = ObjectTypeResolver (fields <> objectFields schemaAPI)
   | otherwise = ObjectTypeResolver fields
+
+hoistRootResolverValue :: (Functor m) => (forall a. m a -> n a) -> RootResolverValue e m -> RootResolverValue e n
+hoistRootResolverValue morphism (NamedResolversValue {queryResolverMap}) =
+  NamedResolversValue
+    { queryResolverMap = hoistNamedResolver (hoistResolver morphism) <$> queryResolverMap
+    }
+hoistRootResolverValue morphism (RootResolverValue {queryResolver, mutationResolver, subscriptionResolver, channelMap}) =
+  RootResolverValue
+    { queryResolver = hoistObjectTypeResolver (hoistResolver morphism) <$> queryResolver
+    , mutationResolver = hoistObjectTypeResolver (hoistResolver morphism) <$> mutationResolver
+    , subscriptionResolver = hoistObjectTypeResolver (hoistResolver morphism) <$> subscriptionResolver
+    , channelMap
+    }

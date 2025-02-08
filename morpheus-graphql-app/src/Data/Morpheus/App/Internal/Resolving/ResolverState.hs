@@ -26,6 +26,7 @@ module Data.Morpheus.App.Internal.Resolving.ResolverState
     runResolverStateM,
     runResolverState,
     runResolverStateValueM,
+    hoistResolverStateT,
     updateCurrentType,
     askFieldTypeName,
     inField,
@@ -45,6 +46,7 @@ import Data.Morpheus.Internal.Ext
     PushEvents (..),
     Result,
     ResultT (..),
+    hoistResultT,
     cleanEvents,
   )
 import Data.Morpheus.Internal.Utils (selectOr)
@@ -134,6 +136,12 @@ runResolverStateValueM res = fmap (fmap snd) . runResolverStateM res
 
 runResolverState :: ResolverState a -> ResolverContext -> GQLResult a
 runResolverState res = fmap snd . runIdentity . runResolverStateM res
+
+hoistResolverStateT :: (forall a. m a -> n a) -> ResolverStateT e m a -> ResolverStateT e n a
+hoistResolverStateT morphism (ResolverStateT {_runResolverStateT}) =
+  ResolverStateT
+    { _runResolverStateT = ReaderT $ hoistResultT morphism . runReaderT _runResolverStateT
+    }
 
 -- internal resolver state
 newtype ResolverStateT event m a = ResolverStateT

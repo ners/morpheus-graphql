@@ -4,6 +4,7 @@ module Data.Morpheus.Internal.Ext
   ( PushEvents (..),
     Result (..),
     ResultT (..),
+    hoistResultT,
     cleanEvents,
     resultOr,
     mapEvent,

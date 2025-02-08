@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -11,6 +12,7 @@
 module Data.Morpheus.Ext.Result
   ( Result (..),
     ResultT (..),
+    hoistResultT,
     mapEvent,
     cleanEvents,
     PushEvents (..),
@@ -117,6 +119,9 @@ instance (Monad m) => MonadError GQLError (ResultT event m) where
 
 instance (Applicative m) => PushEvents event (ResultT event m) where
   pushEvents x = ResultT $ pure $ pure (x, ())
+
+hoistResultT :: (forall a. m a -> n a) -> ResultT e m value -> ResultT e n value
+hoistResultT morphism (ResultT {runResultT}) = ResultT { runResultT = morphism runResultT }
 
 cleanEvents ::
   (Functor m) =>

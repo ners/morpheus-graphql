@@ -11,14 +11,19 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Data.Morpheus.App.Internal.Resolving.Types
   ( ResolverMap,
     NamedResolver (..),
+    hoistNamedResolver,
     NamedResolverResult (..),
     NamedResolverRef (..),
     ResolverValue (..),
+    hoistResolverValue,
+    hoistLazyResolverValue,
     ObjectTypeResolver (..),
+    hoistObjectTypeResolver,
     ResolverEntry,
     mkEnum,
     mkBoolean,
@@ -64,6 +69,13 @@ instance Show (NamedResolver m) where
   show NamedResolver {..} =
     "NamedResolver { name = " <> show resolverName <> " }"
 
+hoistNamedResolver :: (Functor m) => (forall a. m a -> n a) -> NamedResolver m -> NamedResolver n
+hoistNamedResolver morphism NamedResolver {resolverName, resolverFun} =
+  NamedResolver
+    { resolverName
+    , resolverFun = morphism . (fmap . fmap $ hoistNamedResolverResult morphism) . resolverFun
+    }
+
 newtype ObjectTypeResolver m = ObjectTypeResolver
   { objectFields :: HashMap FieldName (m (ResolverValue m))
   }
@@ -72,6 +84,9 @@ instance Show (ObjectTypeResolver m) where
   show ObjectTypeResolver {..} = "ObjectTypeResolver { " <> intercalate "," (map showField (toAssoc objectFields)) <> " }"
     where
       showField (name, _) = show name <> " = " <> "ResolverValue m"
+
+hoistObjectTypeResolver :: (Functor m) => (forall a. m a -> n a) -> ObjectTypeResolver m -> ObjectTypeResolver n
+hoistObjectTypeResolver morphism (ObjectTypeResolver {objectFields}) = ObjectTypeResolver {objectFields = hoistLazyResolverValue morphism <$> objectFields}
 
 data NamedResolverRef = NamedResolverRef
   { resolverTypeName :: TypeName,
@@ -85,6 +100,13 @@ data NamedResolverResult (m :: Type -> Type)
   | NamedEnumResolver TypeName
   | NamedScalarResolver ScalarValue
   | NamedNullResolver
+
+hoistNamedResolverResult :: (Functor m) => (forall a. m a -> n a) -> NamedResolverResult m -> NamedResolverResult n
+hoistNamedResolverResult morphism (NamedObjectResolver o) = NamedObjectResolver $ hoistObjectTypeResolver morphism o
+hoistNamedResolverResult _ (NamedUnionResolver r) = NamedUnionResolver r
+hoistNamedResolverResult _ (NamedEnumResolver n) = NamedEnumResolver n
+hoistNamedResolverResult _ (NamedScalarResolver v) = NamedScalarResolver v
+hoistNamedResolverResult _ NamedNullResolver = NamedNullResolver
 
 instance KeyOf TypeName (NamedResolver m) where
   keyOf = resolverName
@@ -104,6 +126,18 @@ data ResolverValue (m :: Type -> Type)
   | ResObject (Maybe TypeName) (ObjectTypeResolver m)
   | ResRef (m NamedResolverRef)
   | ResLazy (m (ResolverValue m))
+
+hoistResolverValue :: (Functor m) => (forall a. m a -> n a) -> ResolverValue m -> ResolverValue n
+hoistResolverValue _ ResNull = ResNull
+hoistResolverValue _ (ResScalar v) = ResScalar v
+hoistResolverValue morphism (ResList vs) = ResList $ hoistResolverValue morphism <$> vs
+hoistResolverValue _ (ResEnum n) = ResEnum n
+hoistResolverValue morphism (ResObject n o) = ResObject n $ hoistObjectTypeResolver morphism o
+hoistResolverValue morphism (ResRef x) = ResRef $ morphism x
+hoistResolverValue morphism (ResLazy l) = ResLazy $ hoistLazyResolverValue morphism l
+
+hoistLazyResolverValue :: (Functor m) => (forall a. m a -> n a) -> m (ResolverValue m) -> n (ResolverValue n)
+hoistLazyResolverValue morphism = morphism . fmap (hoistResolverValue morphism)
 
 instance
   ( Monad m,

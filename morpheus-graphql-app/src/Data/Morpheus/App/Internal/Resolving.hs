@@ -35,6 +35,7 @@ module Data.Morpheus.App.Internal.Resolving
     EventHandler (..),
     requireObject,
     ResolverValue (..),
+    hoistRootResolverValue,
     NamedResolver (..),
     NamedResolverResult (..),
     NamedResolverRef (..),
